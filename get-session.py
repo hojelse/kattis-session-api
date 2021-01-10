@@ -4,17 +4,11 @@ import argparse
 import os
 import re
 import sys
-import webbrowser
+from requests_html import HTMLSession
 
 import requests
 import requests.exceptions
-
-# Python 2/3 compatibility
-if sys.version_info[0] >= 3:
-    import configparser
-else:
-    # Python 2, import modules with Python 3 names
-    import ConfigParser as configparser
+import configparser
 
 # End Python 2/3 compatibility
 
@@ -25,14 +19,6 @@ _HEADERS = {'User-Agent': 'kattis-session-api'}
 
 class ConfigError(Exception):
     pass
-
-
-def get_url(cfg, option, default):
-    if cfg.has_option('kattis', option):
-        return cfg.get('kattis', option)
-    else:
-        return 'https://%s/%s' % (cfg.get('kattis', 'hostname'), default)
-
 
 def get_config():
     """Returns a ConfigParser object for the .kattisrc file(s)
@@ -60,22 +46,6 @@ submissionurl: https://<kattis>/submit
 submissionsurl: https://<kattis>/submissions''')
     return cfg
 
-def login(login_url, username, password=None, token=None):
-    """Log in to Kattis.
-
-    At least one of password or token needs to be provided.
-
-    Returns a requests.Response with cookies needed to be able to submit
-    """
-    login_args = {'user': username, 'script': 'true'}
-    if password:
-        login_args['password'] = password
-    if token:
-        login_args['token'] = token
-
-    return requests.post(login_url, data=login_args, headers=_HEADERS)
-
-
 def login_from_config(cfg):
     """Log in to Kattis using the access information in a kattisrc file
 
@@ -98,8 +68,27 @@ KATTIS password).
 
 Please download a new .kattisrc file''')
 
-    loginurl = get_url(cfg, 'loginurl', 'login')
+    if cfg.has_option('kattis', 'loginurl'):
+        loginurl = cfg.get('kattis', 'loginurl')
+    else:
+        loginurl = 'https://%s/%s' % (cfg.get('kattis', 'hostname'), 'login')
+
     return login(loginurl, username, password, token)
+
+def login(login_url, username, password=None, token=None):
+    """Log in to Kattis.
+
+    At least one of password or token needs to be provided.
+
+    Returns a requests.Response with cookies needed to be able to submit
+    """
+    login_args = {'user': username, 'script': 'true'}
+    if password:
+        login_args['password'] = password
+    if token:
+        login_args['token'] = token
+
+    return requests.post(login_url, data=login_args, headers=_HEADERS)
 
 
 def main():
@@ -119,7 +108,6 @@ def main():
 
     try:
         login_reply = login_from_config(cfg)
-        print(login_reply)
     except ConfigError as exc:
         print(exc)
         sys.exit(1)
@@ -127,6 +115,7 @@ def main():
         print('Login connection failed:', err)
         sys.exit(1)
 
+    # Login status
     if not login_reply.status_code == 200:
         print('Login failed.')
         if login_reply.status_code == 403:
@@ -137,6 +126,48 @@ def main():
             print('Status code:', login_reply.status_code)
         sys.exit(1)
 
+    # Get session page
+    session = HTMLSession()
+    try:
+        session = HTMLSession()
+        # sessionid = "bue4we"
+        # sessionid = "ke376g"
+        sessionid = "ksjc95"
+        response = session.get("https://itu.kattis.com/sessions/%s?ajax=1" % sessionid, headers=_HEADERS)
+
+        html:requests_html.HTML =  response.html
+
+        # Format content to csv
+        table = html.find('table[id="standings"]', first=True)
+        rows = table.find('tr')
+        
+        data = []
+
+        count = 0
+        for r in rows:
+
+            try:
+                userObj = r.find('td>a[href]', first=True)
+                userLink = userObj.attrs['href']
+                user = userObj.text
+            except AttributeError as e:
+                userLink = None
+                user = None
+
+            try:
+                scoreObj = r.find('td[class="total score"]', first=True)
+                score = scoreObj.text
+            except AttributeError as e:
+                score = None
+
+            data.append([count, score, user, userLink])
+            count += 1
+
+        for d in data:
+            print(d)
+
+    except requests.exceptions.RequestException as e:
+        print(e)
 
 if __name__ == '__main__':
     main()
