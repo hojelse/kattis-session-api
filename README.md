@@ -11,3 +11,5 @@ Remember to download config file with auth token from `https://<kattis>/download
 ## Limitations
 
 Assumes every user row has a link, which is sometimes not the case
+
+Some users can be hidden
