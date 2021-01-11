@@ -1,4 +1,4 @@
-# Kattis to moodle
+# Kattis to moodle script
 
 A script for IT University of Copenhagen, Algorithms and Datastructures spring 2021.
 
