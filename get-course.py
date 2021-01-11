@@ -5,6 +5,7 @@ import os
 import re
 import sys
 from requests_html import HTMLSession
+import json
 
 import requests
 import requests.exceptions
@@ -90,15 +91,69 @@ def login(login_url, username, password=None, token=None):
 
     return requests.post(login_url, data=login_args, headers=_HEADERS)
 
+def json_formatted_generator(json_text):
+    obj = json.loads(json_text)
+
+    useridToName = {}
+    problemNameToId = {}
+    problemIdToName = []
+
+    it = 0
+    for s in obj['sessions']:
+        name = s['problems']['A']['problem_name']
+        problemNameToId[name] = it
+        problemIdToName.append(name)
+        it += 1
+
+    personToSolved = {}
+
+    for s in obj['students']:
+        username = s['username']
+        personToSolved[username] = []
+        useridToName[username] = s['name']
+
+    for t in obj['teachers']:
+        username = t['username']
+        personToSolved[username] = []
+        useridToName[username] = t['name']
+
+    for s in obj['sessions']:
+        for r in s['results']:
+            for p in r['problems']:
+                for m in r['members']:
+                    problemid = problemNameToId[p['problem_name']]
+                    personToSolved[m].append(problemid)
+    
+    for p in personToSolved:
+        output = useridToName[p] + "(" + p + ") : "
+        try:
+            for i in personToSolved[p]:
+                output += problemIdToName[i] + ", "
+        except KeyError as e:
+            output += None
+        yield output
+
 
 def main():
-    parser = argparse.ArgumentParser(prog='kattis', description='hello :)')
-#     parser.add_argument('-p', '--problem',
-#                         help=''''Which problem to submit to.
-# Overrides default guess (first part of first filename)''')
-   
+    parser = argparse.ArgumentParser(prog='get-session.py', description='Get the data from a kattis session i.e. <sub_domain>.kattis.com/sessions/<session_id>')
+    parser.add_argument('-c', '--courseid',
+        help='''Which course to get data from. Overrides default "KSALDAS/2021-Spring"''')
+    parser.add_argument('-f', '--file',
+        help='''Used for testing. Parses and prints a local JSON file.''')
+    parser.add_argument('-o', '--output',
+        help='''Used for testing. Gets and prints course JSON file.''')
 
     args = parser.parse_args()
+
+    courseid = 'KSALDAS/2021-Spring'
+    if(args.courseid is not None):
+        courseid = args.courseid
+
+    if(args.file is not None):
+        f = open(args.file, "r")
+        for line in json_formatted_generator(f.read()):
+            print(line)
+        sys.exit(1)
 
     try:
         cfg = get_config()
@@ -127,47 +182,23 @@ def main():
         sys.exit(1)
 
     # Get session page
-    session = HTMLSession()
     try:
-        session = HTMLSession()
-        # sessionid = "bue4we"
-        # sessionid = "ke376g"
-        sessionid = "ksjc95"
-        response = session.get("https://itu.kattis.com/sessions/%s?ajax=1" % sessionid, headers=_HEADERS)
 
-        html:requests_html.HTML =  response.html
+        response = requests.get("https://itu.kattis.com/courses/%s/export?type=results&submissions=lastaccepted" % courseid, cookies=login_reply.cookies, headers=_HEADERS)
 
-        # Format content to csv
-        table = html.find('table[id="standings"]', first=True)
-        rows = table.find('tr')
-        
-        data = []
+        json_text = json.dumps(json.loads(response.text))
 
-        count = 0
-        for r in rows:
-
-            try:
-                userObj = r.find('td>a[href]', first=True)
-                userLink = userObj.attrs['href']
-                user = userObj.text
-            except AttributeError as e:
-                userLink = None
-                user = None
-
-            try:
-                scoreObj = r.find('td[class="total score"]', first=True)
-                score = scoreObj.text
-            except AttributeError as e:
-                score = None
-
-            data.append([count, score, user, userLink])
-            count += 1
-
-        for d in data:
-            print(d)
+        if(args.output is not None):
+            sys.stdout = open('course.json', 'w')
+            print(json_text)
+            sys.exit(1)
 
     except requests.exceptions.RequestException as e:
-        print(e)
+        print('Json download connection failed', e)
+        sys.exit(1)
+
+    for line in json_formatted_generator(json_text):
+        print(line)
 
 if __name__ == '__main__':
     main()
