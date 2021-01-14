@@ -40,3 +40,5 @@ py get-course.py
 Moodle part not implemented yet.
 
 Doesn't extract emails or ITU initials
+
+Using moodle activity grade import which means: If grades for a particular Moodle activity such as an assignment are imported, they can no longer be edited via the assignment submission page. [docs](https://docs.moodle.org/310/en/Grade_import#Importing_grades)
